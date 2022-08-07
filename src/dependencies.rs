@@ -56,7 +56,8 @@ impl WorkQueue {
 /// Recursively search for dependencies on the search path
 ///
 /// The Elf summaries will not include the input binary
-pub fn resolve_dependencies(search_path : &Vec<PathBuf>, summ : &crate::summarize::ElfSummary) -> collections::BTreeMap<String, crate::summarize::ElfSummary> {
+pub fn resolve_dependencies(search_path : &Vec<PathBuf>, summ : &crate::summarize::ElfSummary)
+                            -> collections::BTreeMap<String, Option<crate::summarize::ElfSummary>> {
     let mut res = collections::BTreeMap::new();
     let mut queue = WorkQueue::new();
 
@@ -66,10 +67,11 @@ pub fn resolve_dependencies(search_path : &Vec<PathBuf>, summ : &crate::summariz
         match analyze_one_dependency(search_path, dep_name.as_str()) {
             Err(_) => {
                 // Report this as a failed lookup
+                res.insert(dep_name, None);
             },
             Ok(dep_summary) => {
                 queue.add_dependencies(&dep_summary);
-                res.insert(dep_name, dep_summary);
+                res.insert(dep_name, Some(dep_summary));
             }
         }
     }

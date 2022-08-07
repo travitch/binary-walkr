@@ -4,7 +4,7 @@ use std::path::{PathBuf};
 /// Compute the shared library search path based on system defaults and `LD_LIBRARY_PATH`
 ///
 /// This does not yet consult the top-level summary to find DT_RUNPATH, but it needs to
-pub fn search_path(_summ : &crate::summarize::ElfSummary) -> Vec<PathBuf> {
+pub fn search_path(sysroot : &PathBuf, _summ : &crate::summarize::ElfSummary) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     match env::var("LD_LIBRARY_PATH") {
@@ -18,10 +18,10 @@ pub fn search_path(_summ : &crate::summarize::ElfSummary) -> Vec<PathBuf> {
 
     // The default paths used by the dynamic loader; note that this could vary
     // somewhat by system, so this list may need to be expanded
-    paths.push(PathBuf::from("/lib"));
-    paths.push(PathBuf::from("/lib64"));
-    paths.push(PathBuf::from("/usr/lib"));
-    paths.push(PathBuf::from("/usr/lib64"));
+    paths.push(sysroot.join(PathBuf::from("lib")));
+    paths.push(sysroot.join(PathBuf::from("lib64")));
+    paths.push(sysroot.join(PathBuf::from("usr/lib")));
+    paths.push(sysroot.join(PathBuf::from("usr/lib64")));
 
     paths
 }

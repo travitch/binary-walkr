@@ -18,7 +18,7 @@ fn endian_as_str(end : Endianness) -> &'static str {
 fn main() -> anyhow::Result<()> {
     let args = options::Options::parse();
     let summary = summarize::summarize_path(&args.input)?;
-    let search_path = search_path::search_path(&summary);
+    let search_path = search_path::search_path(&args.sysroot, &summary);
 
     println!("File {} is a {} bit {} endian ELF file",
              summary.filename.as_path().to_str().unwrap(),
@@ -33,8 +33,16 @@ fn main() -> anyhow::Result<()> {
             println!("  Dynamically linked against:");
 
             for (dep_name, dep_summary) in deps {
-                let disp_path = fs::canonicalize(dep_summary.filename.as_path())?;
-                println!("    {} -> {}", dep_name, disp_path.as_path().to_string_lossy());
+                match dep_summary {
+                    None => {
+                        println!("    {} -> Unresolved", dep_name)
+                    },
+                    Some(dep_summary) => {
+                        // Resolve symbolic links before display
+                        let disp_path = fs::canonicalize(dep_summary.filename.as_path())?;
+                        println!("    {} -> {}", dep_name, disp_path.as_path().to_string_lossy());
+                    }
+                }
             }
         }
     }
