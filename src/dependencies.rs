@@ -32,9 +32,9 @@ impl WorkQueue {
     }
 
     fn add_dependencies(&mut self, summ : &crate::summarize::ElfSummary) {
-        match &summ.dependencies {
-            crate::summarize::BinaryDependencies::Static => {},
-            crate::summarize::BinaryDependencies::Dynamic(dyn_deps) => {
+        match &summ.binary_type {
+            crate::summarize::BinaryType::Static => {},
+            crate::summarize::BinaryType::Dynamic(dyn_deps) => {
                 for dep in &dyn_deps.deps {
                     match self.seen_items.get(dep.as_str()) {
                         None => {
