@@ -38,6 +38,14 @@ fn render_dynamic_symbol_ref(sym_ref : &summarize::DynamicSymbolReference) -> Ve
     vec![format!("{:?}", sym_ref.type_), format!("{:?}", sym_ref.binding), String::from(&sym_ref.symbol.name)]
 }
 
+fn render_defined_dynamic_symbol(sym_def : &summarize::ExportedDynamicSymbol) -> Vec<String> {
+    vec![format!("{:#x}", sym_def.address),
+         format!("{}", sym_def.size),
+         format!("{:?}", sym_def.type_),
+         format!("{:?}", sym_def.binding),
+         String::from(&sym_def.symbol.name)]
+}
+
 fn main() -> anyhow::Result<()> {
     let args = options::Options::parse();
     let summary = summarize::summarize_path(&args.input)?;
@@ -79,6 +87,15 @@ fn main() -> anyhow::Result<()> {
                 sym_ref_table.add_row(row::Row::new(render_dynamic_symbol_ref(&sym_ref)));
             }
             println!("{}", sym_ref_table.render());
+
+            println!("  Defines dynamic symbols:");
+            let mut sym_def_table = term_table::Table::new();
+            sym_def_table.add_row(row::Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"]));
+            for sym_def in &dyn_deps.provided_dynamic_symbols {
+                sym_def_table.add_row(row::Row::new(render_defined_dynamic_symbol(&sym_def)));
+            }
+
+            println!("{}", sym_def_table.render());
         }
     }
 
