@@ -1,11 +1,14 @@
 mod dependencies;
 mod options;
+mod resolve_symbols;
 mod search_path;
 mod summarize;
 
 use clap::Parser;
 use object::Endianness;
+use std::collections;
 use std::fs;
+use std::path::PathBuf;
 use term_table;
 use term_table::row;
 
@@ -16,26 +19,10 @@ fn endian_as_str(end : Endianness) -> &'static str {
     }
 }
 
-// fn format_dynamic_symbol_ref(sym_ref : &summarize::DynamicSymbolReference) -> String {
-//     let mut s = String::from(&sym_ref.symbol.name);
-//     match sym_ref.binding {
-//         summarize::SymbolBinding::Global => {},
-//         summarize::SymbolBinding::Weak => {
-//             s.push_str(" (Weak)");
-//         },
-//         summarize::SymbolBinding::Local => {
-//             s.push_str(" (Local)");
-//         },
-//         summarize::SymbolBinding::Unknown => {
-//             s.push_str(" (Unknown)");
-//         }
-//     }
-
-//     s
-// }
-
-fn render_dynamic_symbol_ref(sym_ref : &summarize::DynamicSymbolReference) -> Vec<String> {
-    vec![format!("{:?}", sym_ref.type_), format!("{:?}", sym_ref.binding), String::from(&sym_ref.symbol.name)]
+fn render_dynamic_symbol_ref<'a>(resolutions : &collections::BTreeMap<summarize::VersionedSymbol, &'a summarize::ElfSummary>,
+                                 sym_ref : &summarize::DynamicSymbolReference) -> Vec<String> {
+    let provider = resolutions.get(&sym_ref.symbol).map_or(PathBuf::from("<Unresolved>"), |elf| elf.filename.clone());
+    vec![format!("{:?}", sym_ref.type_), format!("{:?}", sym_ref.binding), String::from(&sym_ref.symbol.name), provider.to_string_lossy().into()]
 }
 
 fn render_defined_dynamic_symbol(sym_def : &summarize::ExportedDynamicSymbol) -> Vec<String> {
@@ -67,7 +54,7 @@ fn main() -> anyhow::Result<()> {
             let deps = dependencies::resolve_dependencies(&search_path, &summary);
             println!("  Dynamically linked against:");
 
-            for (dep_name, dep_summary) in deps {
+            for (dep_name, dep_summary) in &deps {
                 match dep_summary {
                     None => {
                         println!("    {} -> Unresolved", dep_name)
@@ -80,11 +67,14 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
+            let all_libs = deps.values().filter_map(|x| x.as_ref()).collect();
+            let symbol_resolutions = resolve_symbols::resolve_symbols(&dyn_deps.dynamic_symbol_refs, &all_libs);
+
             println!("  Depends on dynamic symbols:");
             let mut sym_ref_table = term_table::Table::new();
-            sym_ref_table.add_row(row::Row::new(vec!["Type", "Binding", "Symbol"]));
+            sym_ref_table.add_row(row::Row::new(vec!["Type", "Binding", "Symbol", "Provider"]));
             for sym_ref in &dyn_deps.dynamic_symbol_refs {
-                sym_ref_table.add_row(row::Row::new(render_dynamic_symbol_ref(&sym_ref)));
+                sym_ref_table.add_row(row::Row::new(render_dynamic_symbol_ref(&symbol_resolutions, &sym_ref)));
             }
             println!("{}", sym_ref_table.render());
 

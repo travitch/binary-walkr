@@ -15,6 +15,7 @@ pub enum WalkError {
 }
 
 /// A (possibly) versioned symbol
+#[derive(Eq, Ord, PartialOrd, PartialEq, Clone)]
 pub struct VersionedSymbol {
     pub name : String,
     pub version : Option<String>
@@ -23,7 +24,7 @@ pub struct VersionedSymbol {
 impl VersionedSymbol {
     fn new<Elf : FileHeader>(end : Elf::Endian, dyn_strings : &StringTable, sym : &Elf::Sym) -> Self {
         let sym_name = sym.name(end, *dyn_strings).map_or(String::from("<Error>"), |bytes| String::from_utf8_lossy(bytes).into_owned());
-        // FIXME: Parse the symbol string into a simple name and a version
+        // FIXME: Symbol versions are actually in another section - need to look them up
         VersionedSymbol {
             name : sym_name,
             version : None
