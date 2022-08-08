@@ -78,14 +78,16 @@ fn main() -> anyhow::Result<()> {
             }
             println!("{}", sym_ref_table.render());
 
-            println!("  Defines dynamic symbols:");
-            let mut sym_def_table = term_table::Table::new();
-            sym_def_table.add_row(row::Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"]));
-            for sym_def in &dyn_deps.provided_dynamic_symbols {
-                sym_def_table.add_row(row::Row::new(render_defined_dynamic_symbol(&sym_def)));
-            }
+            if dyn_deps.provided_dynamic_symbols.len() > 0 {
+                println!("  Defines dynamic symbols:");
+                let mut sym_def_table = term_table::Table::new();
+                sym_def_table.add_row(row::Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"]));
+                for sym_def in &dyn_deps.provided_dynamic_symbols {
+                    sym_def_table.add_row(row::Row::new(render_defined_dynamic_symbol(&sym_def)));
+                }
 
-            println!("{}", sym_def_table.render());
+                println!("{}", sym_def_table.render());
+            }
         }
     }
 
