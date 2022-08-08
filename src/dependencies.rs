@@ -1,16 +1,18 @@
 use std::collections;
 use std::path::{PathBuf};
 
+use crate::summarize::{BinaryType, ElfSummary, summarize_path};
+
 #[derive(thiserror::Error,Debug)]
 pub enum SearchError {
     #[error("Could not find dependency {0}")]
     MissingLibraryDependency(String)
 }
 
-fn analyze_one_dependency(search_path : &Vec<PathBuf>, lib_name : &str) -> anyhow::Result<crate::summarize::ElfSummary> {
+fn analyze_one_dependency(search_path : &Vec<PathBuf>, lib_name : &str) -> anyhow::Result<ElfSummary> {
     for dir in search_path {
         let candidate = dir.join(PathBuf::from(lib_name));
-        match crate::summarize::summarize_path(&candidate) {
+        match summarize_path(&candidate) {
             Err(_) => {},
             Ok(summ) => { return Ok(summ); }
         }
@@ -31,10 +33,10 @@ impl WorkQueue {
         }
     }
 
-    fn add_dependencies(&mut self, summ : &crate::summarize::ElfSummary) {
+    fn add_dependencies(&mut self, summ : &ElfSummary) {
         match &summ.binary_type {
-            crate::summarize::BinaryType::Static => {},
-            crate::summarize::BinaryType::Dynamic(dyn_deps) => {
+            BinaryType::Static => {},
+            BinaryType::Dynamic(dyn_deps) => {
                 for dep in &dyn_deps.deps {
                     match self.seen_items.get(dep.as_str()) {
                         None => {
@@ -56,8 +58,8 @@ impl WorkQueue {
 /// Recursively search for dependencies on the search path
 ///
 /// The Elf summaries will not include the input binary
-pub fn resolve_dependencies(search_path : &Vec<PathBuf>, summ : &crate::summarize::ElfSummary)
-                            -> collections::BTreeMap<String, Option<crate::summarize::ElfSummary>> {
+pub fn resolve_dependencies(search_path : &Vec<PathBuf>, summ : &ElfSummary)
+                            -> collections::BTreeMap<String, Option<ElfSummary>> {
     let mut res = collections::BTreeMap::new();
     let mut queue = WorkQueue::new();
 

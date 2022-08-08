@@ -1,8 +1,10 @@
 use std::collections;
 
+use crate::summarize::{ElfSummary, VersionedSymbol, DynamicSymbolReference, BinaryType};
+
 /// Determine which dependencies provide each dynamic symbol referenced by the given `ElfSummary`
-pub fn resolve_symbols<'a>(dyn_sym_refs : &Vec<crate::summarize::DynamicSymbolReference>, deps : &Vec<&'a crate::summarize::ElfSummary>) ->
-    collections::BTreeMap<crate::summarize::VersionedSymbol, &'a crate::summarize::ElfSummary>
+pub fn resolve_symbols<'a>(dyn_sym_refs : &Vec<DynamicSymbolReference>, deps : &Vec<&'a ElfSummary>) ->
+    collections::BTreeMap<VersionedSymbol, &'a ElfSummary>
 {
     let mut res = collections::BTreeMap::new();
     let mut needed_syms = collections::HashSet::new();
@@ -13,8 +15,8 @@ pub fn resolve_symbols<'a>(dyn_sym_refs : &Vec<crate::summarize::DynamicSymbolRe
 
     for dep in deps {
         match &dep.binary_type {
-            crate::summarize::BinaryType::Static => {},
-            crate::summarize::BinaryType::Dynamic(dyn_data) => {
+            BinaryType::Static => {},
+            BinaryType::Dynamic(dyn_data) => {
                 for defined_sym in &dyn_data.provided_dynamic_symbols {
                     match needed_syms.get(&defined_sym.symbol.name) {
                         None => {},
