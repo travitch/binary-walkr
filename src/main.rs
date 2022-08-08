@@ -3,12 +3,14 @@ mod options;
 mod resolve_symbols;
 mod search_path;
 mod summarize;
+mod ui;
 
 use clap::Parser;
 use object::Endianness;
 use std::collections;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 use term_table;
 use term_table::row;
 
@@ -37,6 +39,14 @@ fn main() -> anyhow::Result<()> {
     let args = options::Options::parse();
     let summary = summarize::summarize_path(&args.input)?;
     let search_path = search_path::search_path(&args.sysroot, &summary);
+    let deps = dependencies::resolve_dependencies(&search_path, &summary);
+
+
+    if args.interactive {
+        let dur = Duration::from_millis(250);
+        let enhanced = false;
+        return ui::crossterm::run(dur, enhanced, &summary, &deps);
+    }
 
     // TODO:
     //
@@ -51,7 +61,6 @@ fn main() -> anyhow::Result<()> {
             println!("  Static");
         },
         summarize::BinaryType::Dynamic(dyn_deps) => {
-            let deps = dependencies::resolve_dependencies(&search_path, &summary);
             println!("  Dynamically linked against:");
 
             for (dep_name, dep_summary) in &deps {

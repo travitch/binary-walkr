@@ -21,6 +21,7 @@ binary-walkr /path/to/binary
 It supports the following options:
 
 - `--sysroot`: Specify an alternative root to search for shared libraries from
+- `--interactive`: Start an interactive UI for exploring binary structures
 
 ## Shared Library Search
 
