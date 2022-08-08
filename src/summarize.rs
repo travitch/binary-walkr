@@ -35,7 +35,10 @@ impl VersionedSymbol {
 #[derive(Copy, Clone, Debug)]
 pub enum SymbolType {
     Func,
-    Data,
+    Object,
+    Common,
+    NoType,
+    File,
     Unknown
 }
 
@@ -43,7 +46,10 @@ impl SymbolType {
     fn new(ty : u8) -> Self {
         match ty {
             elf::STT_FUNC => SymbolType::Func,
-            elf::STT_OBJECT => SymbolType::Data,
+            elf::STT_OBJECT => SymbolType::Object,
+            elf::STT_COMMON => SymbolType::Common,
+            elf::STT_NOTYPE => SymbolType::NoType,
+            elf::STT_FILE => SymbolType::File,
             _ => SymbolType::Unknown
         }
     }
