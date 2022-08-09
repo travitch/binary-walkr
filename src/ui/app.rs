@@ -98,12 +98,21 @@ impl<'a> App<'a> {
     pub fn new(title : &str, elf_summary : &'a summarize::ElfSummary,
            resolved_deps : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> Self {
         let all_libs = resolved_deps.values().filter_map(|x| x.as_ref()).collect();
-        let resolved_syms = match &elf_summary.binary_type {
+        let mut resolved_syms = match &elf_summary.binary_type {
             summarize::BinaryType::Static => collections::BTreeMap::new(),
             summarize::BinaryType::Dynamic(dyn_data) => {
                 resolve_symbols(&dyn_data.dynamic_symbol_refs, &all_libs)
             }
         };
+        for lib in &all_libs {
+            match &lib.binary_type {
+                summarize::BinaryType::Static => {},
+                summarize::BinaryType::Dynamic(dyn_data) => {
+                    let mut lib_resolutions = resolve_symbols(&dyn_data.dynamic_symbol_refs, &all_libs);
+                    resolved_syms.append(&mut lib_resolutions);
+                }
+            }
+        }
 
         App {
             title : title.to_string(),
