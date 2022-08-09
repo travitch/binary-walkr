@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections;
 use std::path::PathBuf;
-use tui::widgets::ListState;
+use tui::widgets::{ListState, TableState};
 
 use crate::summarize;
 
@@ -14,10 +14,6 @@ pub enum InfoTabLabels {
 
 impl std::fmt::Display for InfoTabLabels {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
         match self {
             InfoTabLabels::Overview => {
                 write!(f, "Overview")
@@ -43,12 +39,26 @@ pub struct TabState {
     pub selected_tab : usize
 }
 
-
 impl TabState {
     fn new() -> Self {
         TabState {
             tab_labels : vec![InfoTabLabels::Overview, InfoTabLabels::DynamicDependencies, InfoTabLabels::DefinedDynamicSymbols],
             selected_tab : 0
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct BinaryUIState {
+    pub tab_state : TabState,
+    pub defined_dynamic_table_state : TableState
+}
+
+impl BinaryUIState {
+    fn new() -> Self {
+        BinaryUIState {
+            tab_state : TabState::new(),
+            defined_dynamic_table_state : TableState::default()
         }
     }
 }
@@ -78,7 +88,7 @@ pub struct App<'a> {
     /// The state of the tab widget for each binary
     ///
     /// This is initialized on demand
-    pub tab_state : collections::BTreeMap<PathBuf, TabState>
+    pub binary_ui_state : collections::BTreeMap<PathBuf, BinaryUIState>
 }
 
 impl<'a> App<'a> {
@@ -91,7 +101,7 @@ impl<'a> App<'a> {
             resolved_dependencies : resolved_deps,
             selected_binary : ListState::default(),
             focused_pane : Focus::Sidebar,
-            tab_state : collections::BTreeMap::new()
+            binary_ui_state : collections::BTreeMap::new()
         }
     }
 
@@ -101,14 +111,8 @@ impl<'a> App<'a> {
     /// It takes the binary state is being requested for as evidence that a
     /// binary is selected; it does not rely on the binary selection in
     /// `selected_binary`.
-    pub fn binary_tab_state(&mut self, bin : &'a summarize::ElfSummary) -> TabState {
-        match self.tab_state.get(&bin.filename) {
-            Some(ts) => { ts.clone() },
-            None => {
-                self.tab_state.insert(bin.filename.clone(), TabState::new());
-                TabState::new()
-            }
-        }
+    pub fn binary_ui_state(&mut self, bin : &'a summarize::ElfSummary) -> &mut BinaryUIState {
+        self.binary_ui_state.entry(bin.filename.clone()).or_insert_with(BinaryUIState::new)
     }
 
     pub fn selected_binary(&self) -> Option<&'a summarize::ElfSummary> {
@@ -137,14 +141,14 @@ impl<'a> App<'a> {
                     None => {},
                     Some(bin) => {
                         // If we are here at all, the tab state has been instantiated
-                        match self.tab_state.get_mut(&bin.filename) {
+                        match self.binary_ui_state.get_mut(&bin.filename) {
                             None => {},
-                            Some(tab_state) => {
+                            Some(ui_state) => {
                                 // We have already ensured that this character is a digit
                                 let mut user_req = c.to_digit(10).unwrap() as usize;
                                 user_req -= 1;
-                                if user_req < tab_state.tab_labels.len() {
-                                    tab_state.selected_tab = user_req;
+                                if user_req < ui_state.tab_state.tab_labels.len() {
+                                    ui_state.tab_state.selected_tab = user_req;
                                 }
                             }
                         }
@@ -173,6 +177,36 @@ impl<'a> App<'a> {
                     }
                 }
             },
+            KeyCode::Up if self.focused_pane == Focus::InfoPane => {
+                match self.selected_binary() {
+                    None => {},
+                    Some(elf_summ) => {
+                        let ui_state = self.binary_ui_state(elf_summ);
+                        let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                        match selected_tab {
+                            InfoTabLabels::DefinedDynamicSymbols => {
+                                match &elf_summ.binary_type {
+                                    summarize::BinaryType::Static => {},
+                                    summarize::BinaryType::Dynamic(dyn_data) => {
+                                        let num_items = dyn_data.provided_dynamic_symbols.len();
+                                        match ui_state.defined_dynamic_table_state.selected() {
+                                            None => {
+                                                ui_state.defined_dynamic_table_state.select(Some(num_items - 1));
+                                            },
+                                            Some(0) => {},
+                                            Some(cur_idx) => {
+                                                ui_state.defined_dynamic_table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            InfoTabLabels::DynamicDependencies => {},
+                            InfoTabLabels::Overview => {}
+                        }
+                    }
+                }
+            },
             KeyCode::Down if self.focused_pane == Focus::Sidebar => {
                 let num_bins = 1 + self.resolved_dependencies.len();
                 match self.selected_binary.selected() {
@@ -183,7 +217,36 @@ impl<'a> App<'a> {
                         self.selected_binary.select(Some(std::cmp::min(sel_idx + 1, num_bins - 1)));
                     }
                 }
-            }
+            },
+            KeyCode::Down if self.focused_pane == Focus::InfoPane => {
+                match self.selected_binary() {
+                    None => {},
+                    Some(elf_summ) => {
+                        let ui_state = self.binary_ui_state(elf_summ);
+                        let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                        match selected_tab {
+                            InfoTabLabels::DefinedDynamicSymbols => {
+                                match &elf_summ.binary_type {
+                                    summarize::BinaryType::Static => {},
+                                    summarize::BinaryType::Dynamic(dyn_data) => {
+                                        let num_items = dyn_data.provided_dynamic_symbols.len();
+                                        match ui_state.defined_dynamic_table_state.selected() {
+                                            None => {
+                                                ui_state.defined_dynamic_table_state.select(Some(0));
+                                            },
+                                            Some(cur_idx) => {
+                                                ui_state.defined_dynamic_table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            InfoTabLabels::DynamicDependencies => {},
+                            InfoTabLabels::Overview => {}
+                        }
+                    }
+                }
+            },
             _ => {}
         }
     }

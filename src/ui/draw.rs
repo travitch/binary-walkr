@@ -1,4 +1,4 @@
-use crate::ui::app::{App, InfoTabLabels};
+use crate::ui::app::{App, InfoTabLabels, BinaryUIState};
 use crate::summarize::{BinaryType, ElfSummary};
 
 use tui::{
@@ -47,7 +47,7 @@ fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, a
     f.render_widget(overview, area);
 }
 
-fn draw_defined_dynamic_symbols<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, area : Rect) {
+fn draw_defined_dynamic_symbols<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, ui_state : &mut BinaryUIState, area : Rect) {
     match &elf_summ.binary_type {
         BinaryType::Static => {
             let w = Paragraph::new("No dynamic symbols (static binary)");
@@ -74,12 +74,14 @@ fn draw_defined_dynamic_symbols<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSu
                 .column_spacing(1)
                 .widths(&[Constraint::Min(11), Constraint::Min(5), Constraint::Min(12), Constraint::Min(12), Constraint::Length(40)])
                 .block(Block::default().title("Defined Dynamic Symbols").borders(Borders::ALL))
+                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_symbol(">>")
                 .header(
                     Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"])
                         .style(Style::default().fg(Color::Yellow))
                         .bottom_margin(1)
                 );
-            f.render_widget(defined_sym_view, area);
+            f.render_stateful_widget(defined_sym_view, area, &mut ui_state.defined_dynamic_table_state);
         }
     }
 }
@@ -93,26 +95,26 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                 .constraints([Constraint::Length(3), Constraint::Min(40)].as_ref())
                 .split(area);
 
-            let tab_state = app.binary_tab_state(elf_summ);
-            let titles = tab_state.tab_labels
+            let ui_state = app.binary_ui_state(elf_summ);
+            let titles = ui_state.tab_state.tab_labels
                 .iter()
                 .map(|l| Spans::from(l.to_string()))
                 .collect();
             let tabs = Tabs::new(titles)
                 .block(Block::default().title("Binary Views").borders(Borders::ALL))
                 .highlight_style(Style::default().fg(Color::Yellow))
-                .select(tab_state.selected_tab)
+                .select(ui_state.tab_state.selected_tab)
                 .divider(Span::from("|"));
 
             f.render_widget(tabs, chunks[0]);
 
-            match tab_state.tab_labels[tab_state.selected_tab] {
+            match ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab] {
                 InfoTabLabels::Overview => {
                     draw_binary_overview(f, elf_summ, chunks[1]);
                 },
                 InfoTabLabels::DynamicDependencies => {},
                 InfoTabLabels::DefinedDynamicSymbols => {
-                    draw_defined_dynamic_symbols(f, elf_summ, chunks[1]);
+                    draw_defined_dynamic_symbols(f, elf_summ, ui_state, chunks[1]);
                 }
             }
         }
