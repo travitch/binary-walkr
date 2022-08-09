@@ -1,5 +1,5 @@
 use crate::ui::app::{App, InfoTabLabels};
-use crate::summarize::ElfSummary;
+use crate::summarize::{BinaryType, ElfSummary};
 
 use tui::{
     backend::Backend,
@@ -8,7 +8,7 @@ use tui::{
     text::{Span, Spans,Text},
     widgets::{
         Block, Borders, List, ListItem,
-        Row, Table, Tabs,
+        Paragraph, Row, Table, Tabs,
     },
     Frame,
 };
@@ -47,6 +47,43 @@ fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, a
     f.render_widget(overview, area);
 }
 
+fn draw_defined_dynamic_symbols<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, area : Rect) {
+    match &elf_summ.binary_type {
+        BinaryType::Static => {
+            let w = Paragraph::new("No dynamic symbols (static binary)");
+            f.render_widget(w, area);
+        },
+        BinaryType::Dynamic(dyn_data) if dyn_data.provided_dynamic_symbols.is_empty() => {
+            let w = Paragraph::new("No dynamic symbols defined");
+            f.render_widget(w, area);
+        },
+        BinaryType::Dynamic(dyn_data) => {
+            let mut defined_sym_data = Vec::new();
+
+            for sym_def in &dyn_data.provided_dynamic_symbols {
+                defined_sym_data.push(Row::new(vec![
+                    format!("{:#x}", sym_def.address),
+                    format!("{}", sym_def.size),
+                    format!("{:?}", sym_def.type_),
+                    format!("{:?}", sym_def.binding),
+                    String::from(&sym_def.symbol.name)
+                ]));
+            }
+
+            let defined_sym_view = Table::new(defined_sym_data)
+                .column_spacing(1)
+                .widths(&[Constraint::Min(11), Constraint::Min(5), Constraint::Min(12), Constraint::Min(12), Constraint::Length(40)])
+                .block(Block::default().title("Defined Dynamic Symbols").borders(Borders::ALL))
+                .header(
+                    Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"])
+                        .style(Style::default().fg(Color::Yellow))
+                        .bottom_margin(1)
+                );
+            f.render_widget(defined_sym_view, area);
+        }
+    }
+}
+
 fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Rect) {
     match app.selected_binary() {
         None => {},
@@ -74,7 +111,9 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                     draw_binary_overview(f, elf_summ, chunks[1]);
                 },
                 InfoTabLabels::DynamicDependencies => {},
-                InfoTabLabels::DefinedDynamicSymbols => {}
+                InfoTabLabels::DefinedDynamicSymbols => {
+                    draw_defined_dynamic_symbols(f, elf_summ, chunks[1]);
+                }
             }
         }
     }
