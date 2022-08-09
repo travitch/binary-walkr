@@ -1,6 +1,9 @@
 use crate::ui::app::{App, InfoTabLabels, BinaryUIState};
-use crate::summarize::{BinaryType, ElfSummary};
+use crate::summarize::{BinaryType, ElfSummary, VersionedSymbol};
 
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::rc::Rc;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -45,6 +48,45 @@ fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, a
         .widths(&[Constraint::Min(15), Constraint::Ratio(5, 6)])
         .block(Block::default().title("Overview").borders(Borders::ALL));
     f.render_widget(overview, area);
+}
+
+fn draw_dynamic_dependencies<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, resolutions : Rc<BTreeMap<VersionedSymbol, &ElfSummary>>, ui_state : &mut BinaryUIState, area : Rect) {
+    match &elf_summ.binary_type {
+        BinaryType::Static => {
+            let w = Paragraph::new("No dynamic symbols (static binary)");
+            f.render_widget(w, area);
+        },
+        BinaryType::Dynamic(dyn_data) if dyn_data.dynamic_symbol_refs.is_empty() => {
+            let w = Paragraph::new("No dynamic symbols");
+            f.render_widget(w, area);
+        },
+        BinaryType::Dynamic(dyn_data) => {
+            let mut dyn_sym_data = Vec::new();
+
+            for sym_ref in &dyn_data.dynamic_symbol_refs {
+                let provider = resolutions.get(&sym_ref.symbol).map_or(PathBuf::from("<Unresolved>"), |elf| elf.filename.clone());
+                dyn_sym_data.push(Row::new(vec![
+                    format!("{:?}", sym_ref.type_),
+                    format!("{:?}", sym_ref.binding),
+                    String::from(&sym_ref.symbol.name),
+                    provider.to_string_lossy().into()
+                ]));
+            }
+
+            let dyn_sym_view = Table::new(dyn_sym_data)
+                .column_spacing(1)
+                .widths(&[Constraint::Min(12), Constraint::Min(12), Constraint::Length(40), Constraint::Length(40)])
+                .block(Block::default().title("Referenced Dynamic Symbols").borders(Borders::ALL))
+                .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
+                .highlight_symbol(">>")
+                .header(
+                    Row::new(vec!["Type", "Binding", "Symbol", "Provided By"])
+                        .style(Style::default().fg(Color::Yellow))
+                        .bottom_margin(1)
+                );
+            f.render_stateful_widget(dyn_sym_view, area, &mut ui_state.dynamic_reference_table_state);
+        }
+    }
 }
 
 fn draw_defined_dynamic_symbols<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, ui_state : &mut BinaryUIState, area : Rect) {
@@ -95,6 +137,7 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                 .constraints([Constraint::Length(3), Constraint::Min(40)].as_ref())
                 .split(area);
 
+            let resolutions = app.symbol_resolutions.clone();
             let ui_state = app.binary_ui_state(elf_summ);
             let titles = ui_state.tab_state.tab_labels
                 .iter()
@@ -112,7 +155,9 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                 InfoTabLabels::Overview => {
                     draw_binary_overview(f, elf_summ, chunks[1]);
                 },
-                InfoTabLabels::DynamicDependencies => {},
+                InfoTabLabels::DynamicDependencies => {
+                    draw_dynamic_dependencies(f, elf_summ, resolutions, ui_state, chunks[1]);
+                },
                 InfoTabLabels::DefinedDynamicSymbols => {
                     draw_defined_dynamic_symbols(f, elf_summ, ui_state, chunks[1]);
                 }

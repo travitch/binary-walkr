@@ -1,9 +1,11 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections;
 use std::path::PathBuf;
+use std::rc::Rc;
 use tui::widgets::{ListState, TableState};
 
 use crate::summarize;
+use crate::resolve_symbols::{resolve_symbols};
 
 #[derive(Copy, Clone)]
 pub enum InfoTabLabels {
@@ -49,14 +51,16 @@ impl TabState {
 
 pub struct BinaryUIState {
     pub tab_state : TabState,
-    pub defined_dynamic_table_state : TableState
+    pub defined_dynamic_table_state : TableState,
+    pub dynamic_reference_table_state : TableState
 }
 
 impl BinaryUIState {
     fn new() -> Self {
         BinaryUIState {
             tab_state : TabState::new(),
-            defined_dynamic_table_state : TableState::default()
+            defined_dynamic_table_state : TableState::default(),
+            dynamic_reference_table_state : TableState::default()
         }
     }
 }
@@ -81,6 +85,7 @@ pub struct App<'a> {
     pub should_quit : bool,
     pub elf : &'a summarize::ElfSummary,
     pub resolved_dependencies : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>,
+    pub symbol_resolutions : Rc<collections::BTreeMap<summarize::VersionedSymbol, &'a summarize::ElfSummary>>,
     pub selected_binary : ListState,
     pub focused_pane : Focus,
     /// The state of the tab widget for each binary
@@ -92,11 +97,20 @@ pub struct App<'a> {
 impl<'a> App<'a> {
     pub fn new(title : &str, elf_summary : &'a summarize::ElfSummary,
            resolved_deps : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> Self {
+        let all_libs = resolved_deps.values().filter_map(|x| x.as_ref()).collect();
+        let resolved_syms = match &elf_summary.binary_type {
+            summarize::BinaryType::Static => collections::BTreeMap::new(),
+            summarize::BinaryType::Dynamic(dyn_data) => {
+                resolve_symbols(&dyn_data.dynamic_symbol_refs, &all_libs)
+            }
+        };
+
         App {
             title : title.to_string(),
             should_quit : false,
             elf : elf_summary,
             resolved_dependencies : resolved_deps,
+            symbol_resolutions : Rc::new(resolved_syms),
             selected_binary : ListState::default(),
             focused_pane : Focus::Sidebar,
             binary_ui_state : collections::BTreeMap::new()
@@ -179,13 +193,13 @@ impl<'a> App<'a> {
                 match self.selected_binary() {
                     None => {},
                     Some(elf_summ) => {
-                        let ui_state = self.binary_ui_state(elf_summ);
-                        let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
-                        match selected_tab {
-                            InfoTabLabels::DefinedDynamicSymbols => {
-                                match &elf_summ.binary_type {
-                                    summarize::BinaryType::Static => {},
-                                    summarize::BinaryType::Dynamic(dyn_data) => {
+                        match &elf_summ.binary_type {
+                            summarize::BinaryType::Static => {},
+                            summarize::BinaryType::Dynamic(dyn_data) => {
+                                let ui_state = self.binary_ui_state(elf_summ);
+                                let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                                match selected_tab {
+                                    InfoTabLabels::DefinedDynamicSymbols => {
                                         let num_items = dyn_data.provided_dynamic_symbols.len();
                                         match ui_state.defined_dynamic_table_state.selected() {
                                             None => {
@@ -196,11 +210,22 @@ impl<'a> App<'a> {
                                                 ui_state.defined_dynamic_table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
                                             }
                                         }
-                                    }
+                                    },
+                                    InfoTabLabels::DynamicDependencies => {
+                                        let num_items = dyn_data.dynamic_symbol_refs.len();
+                                        match ui_state.dynamic_reference_table_state.selected() {
+                                            None => {
+                                                ui_state.dynamic_reference_table_state.select(Some(num_items - 1));
+                                            },
+                                            Some(0) => {},
+                                            Some(cur_idx) => {
+                                                ui_state.dynamic_reference_table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
+                                            }
+                                        }
+                                    },
+                                    InfoTabLabels::Overview => {}
                                 }
-                            },
-                            InfoTabLabels::DynamicDependencies => {},
-                            InfoTabLabels::Overview => {}
+                            }
                         }
                     }
                 }
@@ -220,13 +245,14 @@ impl<'a> App<'a> {
                 match self.selected_binary() {
                     None => {},
                     Some(elf_summ) => {
-                        let ui_state = self.binary_ui_state(elf_summ);
-                        let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
-                        match selected_tab {
-                            InfoTabLabels::DefinedDynamicSymbols => {
-                                match &elf_summ.binary_type {
-                                    summarize::BinaryType::Static => {},
-                                    summarize::BinaryType::Dynamic(dyn_data) => {
+                        match &elf_summ.binary_type {
+                            summarize::BinaryType::Static => {},
+                            summarize::BinaryType::Dynamic(dyn_data) => {
+                                let ui_state = self.binary_ui_state(elf_summ);
+                                let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                                match selected_tab {
+                                    InfoTabLabels::Overview => {},
+                                    InfoTabLabels::DefinedDynamicSymbols => {
                                         let num_items = dyn_data.provided_dynamic_symbols.len();
                                         match ui_state.defined_dynamic_table_state.selected() {
                                             None => {
@@ -236,11 +262,20 @@ impl<'a> App<'a> {
                                                 ui_state.defined_dynamic_table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
                                             }
                                         }
+                                    },
+                                    InfoTabLabels::DynamicDependencies => {
+                                        let num_items = dyn_data.dynamic_symbol_refs.len();
+                                        match ui_state.dynamic_reference_table_state.selected() {
+                                            None => {
+                                                ui_state.dynamic_reference_table_state.select(Some(0));
+                                            },
+                                            Some(cur_idx) => {
+                                                ui_state.dynamic_reference_table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
+                                            }
+                                        }
                                     }
                                 }
-                            },
-                            InfoTabLabels::DynamicDependencies => {},
-                            InfoTabLabels::Overview => {}
+                            }
                         }
                     }
                 }
