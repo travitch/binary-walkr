@@ -34,22 +34,7 @@ fn render_defined_dynamic_symbol(sym_def : &summarize::ExportedDynamicSymbol) ->
          String::from(&sym_def.symbol.name)]
 }
 
-fn main() -> anyhow::Result<()> {
-    let args = options::Options::parse();
-    let summary = summarize::summarize_path(&args.input)?;
-    let search_path = search_path::search_path(&args.sysroot, &summary);
-    let deps = dependencies::resolve_dependencies(&search_path, &summary);
-
-
-    if args.interactive {
-        let dur = Duration::from_millis(250);
-        return ui::crossterm::run(dur, &summary, &deps);
-    }
-
-    // TODO:
-    //
-    // - Resolve the libraries providing each external symbol
-
+fn render_summary(summary : &summarize::ElfSummary, deps : &collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> anyhow::Result<()> {
     println!("File {} is a {} bit {} endian ELF file",
              summary.filename.as_path().to_str().unwrap(),
              summary.bit_size,
@@ -61,7 +46,7 @@ fn main() -> anyhow::Result<()> {
         summarize::BinaryType::Dynamic(dyn_deps) => {
             println!("  Dynamically linked against:");
 
-            for (dep_name, dep_summary) in &deps {
+            for (dep_name, dep_summary) in deps {
                 match dep_summary {
                     None => {
                         println!("    {} -> Unresolved", dep_name)
@@ -97,6 +82,21 @@ fn main() -> anyhow::Result<()> {
             }
         }
     }
+    Ok(())
+}
 
+fn main() -> anyhow::Result<()> {
+    let args = options::Options::parse();
+    let summary = summarize::summarize_path(&args.input)?;
+    let search_path = search_path::search_path(&args.sysroot, &summary);
+    let deps = dependencies::resolve_dependencies(&search_path, &summary);
+
+
+    if args.interactive {
+        let dur = Duration::from_millis(250);
+        return ui::crossterm::run(dur, &summary, &deps);
+    }
+
+    render_summary(&summary, &deps)?;
     Ok(())
 }
