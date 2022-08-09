@@ -1,4 +1,6 @@
-use crate::ui::app::App;
+use crate::ui::app::{App, InfoTabLabels};
+use crate::summarize::ElfSummary;
+
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -32,6 +34,18 @@ fn draw_endian(end : object::Endianness) -> &'static str {
     }
 }
 
+fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, area : Rect) {
+    let overview_data = vec![
+        Row::new(vec!["Endianness: ", draw_endian(elf_summ.endianness)]),
+        Row::new(vec![format!("{}-bit Elf", elf_summ.bit_size), String::from("")])
+    ];
+    let overview = Table::new(overview_data)
+        .column_spacing(1)
+        .widths(&[Constraint::Min(10), Constraint::Min(10)])
+        .block(Block::default().title("Overview").borders(Borders::ALL));
+    f.render_widget(overview, area);
+}
+
 fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Rect) {
     match app.selected_binary() {
         None => {},
@@ -40,24 +54,27 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(3), Constraint::Min(40)].as_ref())
                 .split(area);
-            let titles = ["Overview", "Dynamic Dependencies", "Defined Dynamic Symbols"].iter().cloned().map(Spans::from).collect();
+
+            let tab_state = app.binary_tab_state(elf_summ);
+            let titles = tab_state.tab_labels
+                .iter()
+                .map(|l| Spans::from(l.to_string()))
+                .collect();
             let tabs = Tabs::new(titles)
                 .block(Block::default().title("Binary Views").borders(Borders::ALL))
                 .highlight_style(Style::default().fg(Color::Yellow))
-                .select(0)
+                .select(tab_state.selected_tab)
                 .divider(Span::from("|"));
 
             f.render_widget(tabs, chunks[0]);
 
-            let overview_data = vec![
-                Row::new(vec!["Endianness: ", draw_endian(elf_summ.endianness)]),
-                Row::new(vec![format!("{}-bit Elf", elf_summ.bit_size), String::from("")])
-            ];
-            let overview = Table::new(overview_data)
-                .column_spacing(1)
-                .widths(&[Constraint::Min(10), Constraint::Min(10)])
-                .block(Block::default().title("Overview").borders(Borders::ALL));
-            f.render_widget(overview, chunks[1]);
+            match tab_state.tab_labels[tab_state.selected_tab] {
+                InfoTabLabels::Overview => {
+                    draw_binary_overview(f, elf_summ, chunks[1]);
+                },
+                InfoTabLabels::DynamicDependencies => {},
+                InfoTabLabels::DefinedDynamicSymbols => {}
+            }
         }
     }
 }
@@ -68,7 +85,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Ratio(1, 4), Constraint::Ratio(3, 4)].as_ref())
-        // .constraints([Constraint::Length(40), Constraint::Min(0)].as_ref())
         .split(f.size());
 
     draw_binary_list_sidebar(f, app, chunks[0]);
