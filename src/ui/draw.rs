@@ -36,12 +36,13 @@ fn draw_endian(end : object::Endianness) -> &'static str {
 
 fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, area : Rect) {
     let overview_data = vec![
-        Row::new(vec!["Endianness: ", draw_endian(elf_summ.endianness)]),
-        Row::new(vec![format!("{}-bit Elf", elf_summ.bit_size), String::from("")])
+        Row::new(vec![String::from("Path:"), elf_summ.filename.as_path().to_string_lossy().into_owned()]),
+        Row::new(vec!["Endianness:", draw_endian(elf_summ.endianness)]),
+        Row::new(vec![String::from("Pointer Width: "), format!("{} bits", elf_summ.bit_size)])
     ];
     let overview = Table::new(overview_data)
         .column_spacing(1)
-        .widths(&[Constraint::Min(10), Constraint::Min(10)])
+        .widths(&[Constraint::Min(15), Constraint::Ratio(5, 6)])
         .block(Block::default().title("Overview").borders(Borders::ALL));
     f.render_widget(overview, area);
 }
