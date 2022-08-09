@@ -11,7 +11,6 @@ use std::collections;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use term_table;
 use term_table::row;
 
 fn endian_as_str(end : Endianness) -> &'static str {
@@ -44,8 +43,7 @@ fn main() -> anyhow::Result<()> {
 
     if args.interactive {
         let dur = Duration::from_millis(250);
-        let enhanced = false;
-        return ui::crossterm::run(dur, enhanced, &summary, &deps);
+        return ui::crossterm::run(dur, &summary, &deps);
     }
 
     // TODO:
@@ -83,16 +81,16 @@ fn main() -> anyhow::Result<()> {
             let mut sym_ref_table = term_table::Table::new();
             sym_ref_table.add_row(row::Row::new(vec!["Type", "Binding", "Symbol", "Provider"]));
             for sym_ref in &dyn_deps.dynamic_symbol_refs {
-                sym_ref_table.add_row(row::Row::new(render_dynamic_symbol_ref(&symbol_resolutions, &sym_ref)));
+                sym_ref_table.add_row(row::Row::new(render_dynamic_symbol_ref(&symbol_resolutions, sym_ref)));
             }
             println!("{}", sym_ref_table.render());
 
-            if dyn_deps.provided_dynamic_symbols.len() > 0 {
+            if !dyn_deps.provided_dynamic_symbols.is_empty() {
                 println!("  Defines dynamic symbols:");
                 let mut sym_def_table = term_table::Table::new();
                 sym_def_table.add_row(row::Row::new(vec!["Address", "Size", "Type", "Binding", "Symbol"]));
                 for sym_def in &dyn_deps.provided_dynamic_symbols {
-                    sym_def_table.add_row(row::Row::new(render_defined_dynamic_symbol(&sym_def)));
+                    sym_def_table.add_row(row::Row::new(render_defined_dynamic_symbol(sym_def)));
                 }
 
                 println!("{}", sym_def_table.render());

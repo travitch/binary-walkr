@@ -16,7 +16,6 @@ pub enum Focus {
 /// Application state
 pub struct App<'a> {
     pub title : String,
-    pub enhanced_graphics : bool,
     pub should_quit : bool,
     pub elf : &'a summarize::ElfSummary,
     pub resolved_dependencies : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>,
@@ -25,13 +24,12 @@ pub struct App<'a> {
 }
 
 impl<'a> App<'a> {
-    pub fn new(title : &str, enhanced_graphics : bool, elf : &'a summarize::ElfSummary,
+    pub fn new(title : &str, elf_summary : &'a summarize::ElfSummary,
            resolved_deps : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> Self {
         App {
             title : title.to_string(),
-            enhanced_graphics : enhanced_graphics,
             should_quit : false,
-            elf : elf,
+            elf : elf_summary,
             resolved_dependencies : resolved_deps,
             selected_binary : ListState::default(),
             focused_pane : Focus::Sidebar
@@ -43,7 +41,7 @@ impl<'a> App<'a> {
             None => None,
             Some(idx) => {
                 if idx == 0 {
-                    Some(&self.elf)
+                    Some(self.elf)
                 } else {
                     let v = self.resolved_dependencies.values().map(|o| o.as_ref()).collect::<Vec<Option<&summarize::ElfSummary>>>();
                     v[idx - 1]

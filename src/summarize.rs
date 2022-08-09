@@ -4,7 +4,7 @@ use object::read::elf as elf_reader;
 use object::read::elf::{FileHeader, Dyn, Sym};
 use object::elf;
 use std::fs;
-use std::path::{PathBuf};
+use std::path::{PathBuf, Path};
 
 #[derive(thiserror::Error,Debug)]
 pub enum WalkError {
@@ -132,7 +132,7 @@ where Elf : elf_reader::FileHeader<Endian = Endianness> {
             // for resolving dynamic strings).
             let (string_sec_idx, _string_sec) = sec_table.section_by_name(end, ".dynstr".as_bytes()).ok_or(WalkError::MissingExpectedDynstrSection)?;
             let dyn_strings = sec_table.strings(end, bytes, SectionIndex(string_sec_idx))?;
-            let mut deps = Vec::new();
+            let mut dyn_deps = Vec::new();
 
             for d in dyn_entries {
                 match d.tag32(end) {
@@ -141,7 +141,7 @@ where Elf : elf_reader::FileHeader<Endian = Endianness> {
                         if tag == elf::DT_NEEDED {
                             let needed_string_bytes = d.string(end, dyn_strings)?;
                             let needed_string = String::from_utf8(needed_string_bytes.to_vec())?;
-                            deps.push(needed_string.clone());
+                            dyn_deps.push(needed_string.clone());
                         }
                     }
                 }
@@ -152,8 +152,8 @@ where Elf : elf_reader::FileHeader<Endian = Endianness> {
             let (dynsym_sec_idx, _dynsym_sec) = sec_table.section_by_name(end, ".dynsym".as_bytes()).ok_or(WalkError::MissingExpectedDynsymSection)?;
             let dyn_symtab = sec_table.symbol_table_by_index(end, bytes, SectionIndex(dynsym_sec_idx))?;
             for sym in dyn_symtab.symbols() {
-                let sym_name = VersionedSymbol::new::<Elf>(end, &dyn_strings, &sym);
-                if sym_name.name.len() == 0 {
+                let sym_name = VersionedSymbol::new::<Elf>(end, &dyn_strings, sym);
+                if sym_name.name.is_empty() {
                     continue;
                 }
 
@@ -177,7 +177,7 @@ where Elf : elf_reader::FileHeader<Endian = Endianness> {
             }
 
             let dyn_data = DynamicData {
-                deps : deps,
+                deps : dyn_deps,
                 dynamic_symbol_refs : undef_symbols,
                 provided_dynamic_symbols : def_symbols
             };
@@ -186,7 +186,7 @@ where Elf : elf_reader::FileHeader<Endian = Endianness> {
     }
 }
 
-fn summarize_elf<Elf : elf_reader::FileHeader<Endian = Endianness>>(f : &PathBuf, bytes : &[u8], obj : &Elf) -> anyhow::Result<ElfSummary> {
+fn summarize_elf<Elf : elf_reader::FileHeader<Endian = Endianness>>(f : &Path, bytes : &[u8], obj : &Elf) -> anyhow::Result<ElfSummary> {
     let end = obj.endian()?;
     let sec_table = obj.sections(end, bytes)?;
 
@@ -194,7 +194,7 @@ fn summarize_elf<Elf : elf_reader::FileHeader<Endian = Endianness>>(f : &PathBuf
     let bs = ElfSummary {
         endianness : if obj.is_little_endian() { Endianness::Little } else { Endianness::Big },
         bit_size : if obj.is_class_32() { 32 } else { 64 },
-        filename : f.clone(),
+        filename : PathBuf::from(f),
         binary_type : deps
     };
     Ok(bs)
@@ -203,10 +203,10 @@ fn summarize_elf<Elf : elf_reader::FileHeader<Endian = Endianness>>(f : &PathBuf
 pub fn summarize_path(path : &PathBuf) -> anyhow::Result<ElfSummary> {
     let bytes = fs::read(path)?;
     match elf::FileHeader64::<Endianness>::parse(bytes.as_slice()) {
-        Ok(e64) => summarize_elf(path, bytes.as_slice(), e64),
+        Ok(e64) => summarize_elf(path.as_path(), bytes.as_slice(), e64),
         Err(_) => {
             match elf::FileHeader32::<Endianness>::parse(bytes.as_slice()) {
-                Ok(e32) => summarize_elf(path, bytes.as_slice(), e32),
+                Ok(e32) => summarize_elf(path.as_path(), bytes.as_slice(), e32),
                 Err(_) => unimplemented!()
             }
         }

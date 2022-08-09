@@ -12,9 +12,7 @@ use tui::{
 };
 
 fn draw_binary_list_sidebar<B: Backend>(f : &mut Frame<B>, app: &mut App, area : Rect) {
-    let mut items = Vec::new();
-
-    items.push(ListItem::new(Text::from(app.elf.filename.as_path().to_string_lossy())));
+    let mut items = vec![ListItem::new(Text::from(app.elf.filename.as_path().to_string_lossy()))];
 
     for lib in app.resolved_dependencies.keys() {
         items.push(ListItem::new(Text::from(format!("  {}", lib))));

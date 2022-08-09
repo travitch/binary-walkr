@@ -1,19 +1,19 @@
 use std::env;
-use std::path::{PathBuf};
+use std::path::{PathBuf, Path};
 
 use crate::summarize::ElfSummary;
 
 /// Compute the shared library search path based on system defaults and `LD_LIBRARY_PATH`
 ///
 /// This does not yet consult the top-level summary to find DT_RUNPATH, but it needs to
-pub fn search_path(sysroot : &PathBuf, _summ : &ElfSummary) -> Vec<PathBuf> {
+pub fn search_path(sysroot : &Path, _summ : &ElfSummary) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     match env::var("LD_LIBRARY_PATH") {
         Err(_) => {},
         Ok(path_str) => {
             for path in env::split_paths(&path_str) {
-                paths.push(PathBuf::from(path));
+                paths.push(path);
             }
         }
     }

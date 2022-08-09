@@ -36,7 +36,7 @@ fn run_app<B: tui::backend::Backend>(terminal: &mut tui::Terminal<B>, mut app: a
     }
 }
 
-pub fn run(tick_rate : Duration, enhanced_graphics : bool,
+pub fn run(tick_rate : Duration,
            elf : &summarize::ElfSummary,
            resolved_deps : &collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> anyhow::Result<()> {
     // setup terminal
@@ -47,7 +47,7 @@ pub fn run(tick_rate : Duration, enhanced_graphics : bool,
     let mut terminal = tui::Terminal::new(backend)?;
 
     // create app and run it
-    let app = app::App::new("binary-walkr", enhanced_graphics, elf, resolved_deps);
+    let app = app::App::new("binary-walkr", elf, resolved_deps);
     let res = run_app(&mut terminal, app, tick_rate);
 
     // restore terminal
