@@ -33,7 +33,6 @@ impl std::fmt::Display for InfoTabLabels {
 /// Each binary has its own state
 ///
 /// The labels are included in the tab state, as different types of binary will soon have different tabs
-#[derive(Clone)]
 pub struct TabState {
     pub tab_labels : Vec<InfoTabLabels>,
     pub selected_tab : usize
@@ -48,7 +47,6 @@ impl TabState {
     }
 }
 
-#[derive(Clone)]
 pub struct BinaryUIState {
     pub tab_state : TabState,
     pub defined_dynamic_table_state : TableState
