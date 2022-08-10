@@ -46,6 +46,41 @@ impl TabState {
             selected_tab : 0
         }
     }
+
+    fn selected_label(&self) -> InfoTabLabels {
+        self.tab_labels[self.selected_tab]
+    }
+}
+
+fn increment_table_selection(table_state : &mut TableState, num_items : usize) {
+    if num_items == 0 {
+        return;
+    }
+
+    match table_state.selected() {
+        None => {
+            table_state.select(Some(0));
+        },
+        Some(cur_idx) => {
+            table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
+        }
+    }
+}
+
+fn decrement_table_selection(table_state : &mut TableState, num_items : usize) {
+    if num_items == 0 {
+        return;
+    }
+
+    match table_state.selected() {
+        None => {
+            table_state.select(Some(num_items - 1));
+        },
+        Some(0) => {},
+        Some(cur_idx) => {
+            table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
+        }
+    }
 }
 
 pub struct BinaryUIState {
@@ -223,31 +258,15 @@ impl<'a> App<'a> {
                             summarize::BinaryType::Static => {},
                             summarize::BinaryType::Dynamic(dyn_data) => {
                                 let ui_state = self.mutable_app_data.binary_ui_state(elf_summ);
-                                let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                                let selected_tab = ui_state.tab_state.selected_label();
                                 match selected_tab {
                                     InfoTabLabels::DefinedDynamicSymbols => {
                                         let num_items = dyn_data.provided_dynamic_symbols.len();
-                                        match ui_state.defined_dynamic_table_state.selected() {
-                                            None => {
-                                                ui_state.defined_dynamic_table_state.select(Some(num_items - 1));
-                                            },
-                                            Some(0) => {},
-                                            Some(cur_idx) => {
-                                                ui_state.defined_dynamic_table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
-                                            }
-                                        }
+                                        decrement_table_selection(&mut ui_state.defined_dynamic_table_state, num_items);
                                     },
                                     InfoTabLabels::DynamicDependencies => {
                                         let num_items = dyn_data.dynamic_symbol_refs.len();
-                                        match ui_state.dynamic_reference_table_state.selected() {
-                                            None => {
-                                                ui_state.dynamic_reference_table_state.select(Some(num_items - 1));
-                                            },
-                                            Some(0) => {},
-                                            Some(cur_idx) => {
-                                                ui_state.dynamic_reference_table_state.select(Some(std::cmp::max(0, cur_idx - 1)));
-                                            }
-                                        }
+                                        decrement_table_selection(&mut ui_state.dynamic_reference_table_state, num_items);
                                     },
                                     InfoTabLabels::Overview => {}
                                 }
@@ -275,30 +294,16 @@ impl<'a> App<'a> {
                             summarize::BinaryType::Static => {},
                             summarize::BinaryType::Dynamic(dyn_data) => {
                                 let ui_state = self.mutable_app_data.binary_ui_state(elf_summ);
-                                let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
+                                let selected_tab = ui_state.tab_state.selected_label();
                                 match selected_tab {
                                     InfoTabLabels::Overview => {},
                                     InfoTabLabels::DefinedDynamicSymbols => {
                                         let num_items = dyn_data.provided_dynamic_symbols.len();
-                                        match ui_state.defined_dynamic_table_state.selected() {
-                                            None => {
-                                                ui_state.defined_dynamic_table_state.select(Some(0));
-                                            },
-                                            Some(cur_idx) => {
-                                                ui_state.defined_dynamic_table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
-                                            }
-                                        }
+                                        increment_table_selection(&mut ui_state.defined_dynamic_table_state, num_items);
                                     },
                                     InfoTabLabels::DynamicDependencies => {
                                         let num_items = dyn_data.dynamic_symbol_refs.len();
-                                        match ui_state.dynamic_reference_table_state.selected() {
-                                            None => {
-                                                ui_state.dynamic_reference_table_state.select(Some(0));
-                                            },
-                                            Some(cur_idx) => {
-                                                ui_state.dynamic_reference_table_state.select(Some(std::cmp::min(num_items - 1, cur_idx + 1)));
-                                            }
-                                        }
+                                        increment_table_selection(&mut ui_state.dynamic_reference_table_state, num_items);
                                     }
                                 }
                             }
