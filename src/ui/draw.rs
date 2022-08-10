@@ -3,7 +3,6 @@ use crate::summarize::{BinaryType, ElfSummary, VersionedSymbol};
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -17,9 +16,9 @@ use tui::{
 };
 
 fn draw_binary_list_sidebar<B: Backend>(f : &mut Frame<B>, app: &mut App, area : Rect) {
-    let mut items = vec![ListItem::new(Text::from(app.elf.filename.as_path().to_string_lossy()))];
+    let mut items = vec![ListItem::new(Text::from(app.static_app_data.elf.filename.as_path().to_string_lossy()))];
 
-    for lib in app.resolved_dependencies.keys() {
+    for lib in app.static_app_data.resolved_dependencies.keys() {
         items.push(ListItem::new(Text::from(format!("  {}", lib))));
     }
 
@@ -27,7 +26,7 @@ fn draw_binary_list_sidebar<B: Backend>(f : &mut Frame<B>, app: &mut App, area :
         .block(Block::default().title("Binary Images").borders(Borders::ALL))
         .highlight_style(Style::default().add_modifier(Modifier::ITALIC))
         .highlight_symbol(">>");
-    f.render_stateful_widget(w, area, &mut app.selected_binary);
+    f.render_stateful_widget(w, area, &mut app.mutable_app_data.selected_binary);
 }
 
 fn draw_endian(end : object::Endianness) -> &'static str {
@@ -50,7 +49,7 @@ fn draw_binary_overview<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, a
     f.render_widget(overview, area);
 }
 
-fn draw_dynamic_dependencies<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, resolutions : Rc<BTreeMap<VersionedSymbol, &ElfSummary>>, ui_state : &mut BinaryUIState, area : Rect) {
+fn draw_dynamic_dependencies<B: Backend>(f : &mut Frame<B>, elf_summ : &ElfSummary, resolutions : &BTreeMap<VersionedSymbol, &ElfSummary>, ui_state : &mut BinaryUIState, area : Rect) {
     match &elf_summ.binary_type {
         BinaryType::Static => {
             let w = Paragraph::new("No dynamic symbols (static binary)");
@@ -137,8 +136,8 @@ fn draw_selected_binary<B: Backend>(f : &mut Frame<B>, app : &mut App, area : Re
                 .constraints([Constraint::Length(3), Constraint::Min(40)].as_ref())
                 .split(area);
 
-            let resolutions = app.symbol_resolutions.clone();
-            let ui_state = app.binary_ui_state(elf_summ);
+            let resolutions = &app.static_app_data.symbol_resolutions;
+            let ui_state = app.mutable_app_data.binary_ui_state(elf_summ);
             let titles = ui_state.tab_state.tab_labels
                 .iter()
                 .map(|l| Spans::from(l.to_string()))

@@ -1,7 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::collections;
 use std::path::PathBuf;
-use std::rc::Rc;
 use tui::widgets::{ListState, TableState};
 
 use crate::summarize;
@@ -79,19 +78,39 @@ pub enum Focus {
     InfoPane
 }
 
-/// Application state
-pub struct App<'a> {
+pub struct StaticAppData<'a> {
     pub title : String,
-    pub should_quit : bool,
     pub elf : &'a summarize::ElfSummary,
     pub resolved_dependencies : &'a collections::BTreeMap<String, Option<summarize::ElfSummary>>,
-    pub symbol_resolutions : Rc<collections::BTreeMap<summarize::VersionedSymbol, &'a summarize::ElfSummary>>,
+    pub symbol_resolutions : collections::BTreeMap<summarize::VersionedSymbol, &'a summarize::ElfSummary>
+}
+
+pub struct MutableAppData {
+    pub should_quit : bool,
     pub selected_binary : ListState,
     pub focused_pane : Focus,
     /// The state of the tab widget for each binary
     ///
     /// This is initialized on demand
     pub binary_ui_state : collections::BTreeMap<PathBuf, BinaryUIState>
+}
+
+impl MutableAppData {
+    /// Get the tab state for the given binary; note that this is total because
+    /// it will lazily instantiate tab state if needed.
+    ///
+    /// It takes the binary state is being requested for as evidence that a
+    /// binary is selected; it does not rely on the binary selection in
+    /// `selected_binary`.
+    pub fn binary_ui_state(&mut self, bin : & summarize::ElfSummary) -> &mut BinaryUIState {
+        self.binary_ui_state.entry(bin.filename.clone()).or_insert_with(BinaryUIState::new)
+    }
+}
+
+/// Application state
+pub struct App<'a> {
+    pub static_app_data : StaticAppData<'a>,
+    pub mutable_app_data : MutableAppData
 }
 
 impl<'a> App<'a> {
@@ -114,36 +133,34 @@ impl<'a> App<'a> {
             }
         }
 
-        App {
+        let static_data = StaticAppData {
             title : title.to_string(),
-            should_quit : false,
             elf : elf_summary,
             resolved_dependencies : resolved_deps,
-            symbol_resolutions : Rc::new(resolved_syms),
+            symbol_resolutions : resolved_syms
+        };
+
+        let mutable_data = MutableAppData {
+            should_quit : false,
             selected_binary : ListState::default(),
             focused_pane : Focus::Sidebar,
             binary_ui_state : collections::BTreeMap::new()
+        };
+
+        App {
+            static_app_data : static_data,
+            mutable_app_data : mutable_data
         }
     }
 
-    /// Get the tab state for the given binary; note that this is total because
-    /// it will lazily instantiate tab state if needed.
-    ///
-    /// It takes the binary state is being requested for as evidence that a
-    /// binary is selected; it does not rely on the binary selection in
-    /// `selected_binary`.
-    pub fn binary_ui_state(&mut self, bin : &'a summarize::ElfSummary) -> &mut BinaryUIState {
-        self.binary_ui_state.entry(bin.filename.clone()).or_insert_with(BinaryUIState::new)
-    }
-
     pub fn selected_binary(&self) -> Option<&'a summarize::ElfSummary> {
-        match self.selected_binary.selected() {
+        match self.mutable_app_data.selected_binary.selected() {
             None => None,
             Some(idx) => {
                 if idx == 0 {
-                    Some(self.elf)
+                    Some(self.static_app_data.elf)
                 } else {
-                    let v = self.resolved_dependencies.values().map(|o| o.as_ref()).collect::<Vec<Option<&summarize::ElfSummary>>>();
+                    let v = self.static_app_data.resolved_dependencies.values().map(|o| o.as_ref()).collect::<Vec<Option<&summarize::ElfSummary>>>();
                     v[idx - 1]
                 }
             }
@@ -153,16 +170,16 @@ impl<'a> App<'a> {
     pub fn on_key(&mut self, evt : KeyEvent) {
         match evt.code {
             KeyCode::Char('q') if evt.modifiers == KeyModifiers::CONTROL => {
-                self.should_quit = true;
+                self.mutable_app_data.should_quit = true;
             },
-            KeyCode::Char(c) if evt.modifiers == KeyModifiers::ALT  && c >= '1' && c <= '9' && self.focused_pane == Focus::InfoPane => {
+            KeyCode::Char(c) if evt.modifiers == KeyModifiers::ALT  && c >= '1' && c <= '9' && self.mutable_app_data.focused_pane == Focus::InfoPane => {
                 // c.is_ascii_digit()
                 // The user wants to switch info pane using ALT+#
                 match self.selected_binary() {
                     None => {},
                     Some(bin) => {
                         // If we are here at all, the tab state has been instantiated
-                        match self.binary_ui_state.get_mut(&bin.filename) {
+                        match self.mutable_app_data.binary_ui_state.get_mut(&bin.filename) {
                             None => {},
                             Some(ui_state) => {
                                 // We have already ensured that this character is a digit
@@ -178,34 +195,34 @@ impl<'a> App<'a> {
             },
             KeyCode::Tab => {
                 // Change focus between the sidebar and info pane
-                if self.focused_pane == Focus::Sidebar {
-                    self.focused_pane = Focus::InfoPane;
+                if self.mutable_app_data.focused_pane == Focus::Sidebar {
+                    self.mutable_app_data.focused_pane = Focus::InfoPane;
                 } else {
-                    self.focused_pane = Focus::Sidebar;
+                    self.mutable_app_data.focused_pane = Focus::Sidebar;
                 }
             },
-            KeyCode::Up if self.focused_pane == Focus::Sidebar => {
-                let num_bins = 1 + self.resolved_dependencies.len();
-                match self.selected_binary.selected() {
+            KeyCode::Up if self.mutable_app_data.focused_pane == Focus::Sidebar => {
+                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
+                match self.mutable_app_data.selected_binary.selected() {
                     None => {
-                        self.selected_binary.select(Some(num_bins - 1));
+                        self.mutable_app_data.selected_binary.select(Some(num_bins - 1));
                     },
                     Some(sel_idx) if sel_idx == 0 => {
                         // No-op
                     },
                     Some(sel_idx) => {
-                        self.selected_binary.select(Some(sel_idx - 1));
+                        self.mutable_app_data.selected_binary.select(Some(sel_idx - 1));
                     }
                 }
             },
-            KeyCode::Up if self.focused_pane == Focus::InfoPane => {
+            KeyCode::Up if self.mutable_app_data.focused_pane == Focus::InfoPane => {
                 match self.selected_binary() {
                     None => {},
                     Some(elf_summ) => {
                         match &elf_summ.binary_type {
                             summarize::BinaryType::Static => {},
                             summarize::BinaryType::Dynamic(dyn_data) => {
-                                let ui_state = self.binary_ui_state(elf_summ);
+                                let ui_state = self.mutable_app_data.binary_ui_state(elf_summ);
                                 let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
                                 match selected_tab {
                                     InfoTabLabels::DefinedDynamicSymbols => {
@@ -239,25 +256,25 @@ impl<'a> App<'a> {
                     }
                 }
             },
-            KeyCode::Down if self.focused_pane == Focus::Sidebar => {
-                let num_bins = 1 + self.resolved_dependencies.len();
-                match self.selected_binary.selected() {
+            KeyCode::Down if self.mutable_app_data.focused_pane == Focus::Sidebar => {
+                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
+                match self.mutable_app_data.selected_binary.selected() {
                     None => {
-                        self.selected_binary.select(Some(0));
+                        self.mutable_app_data.selected_binary.select(Some(0));
                     },
                     Some(sel_idx) => {
-                        self.selected_binary.select(Some(std::cmp::min(sel_idx + 1, num_bins - 1)));
+                        self.mutable_app_data.selected_binary.select(Some(std::cmp::min(sel_idx + 1, num_bins - 1)));
                     }
                 }
             },
-            KeyCode::Down if self.focused_pane == Focus::InfoPane => {
+            KeyCode::Down if self.mutable_app_data.focused_pane == Focus::InfoPane => {
                 match self.selected_binary() {
                     None => {},
                     Some(elf_summ) => {
                         match &elf_summ.binary_type {
                             summarize::BinaryType::Static => {},
                             summarize::BinaryType::Dynamic(dyn_data) => {
-                                let ui_state = self.binary_ui_state(elf_summ);
+                                let ui_state = self.mutable_app_data.binary_ui_state(elf_summ);
                                 let selected_tab = ui_state.tab_state.tab_labels[ui_state.tab_state.selected_tab];
                                 match selected_tab {
                                     InfoTabLabels::Overview => {},

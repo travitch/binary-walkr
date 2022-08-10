@@ -30,7 +30,7 @@ fn run_app<B: tui::backend::Backend>(terminal: &mut tui::Terminal<B>, mut app: a
             // app.on_tick();
             last_tick = Instant::now();
         }
-        if app.should_quit {
+        if app.mutable_app_data.should_quit {
             return Ok(());
         }
     }
