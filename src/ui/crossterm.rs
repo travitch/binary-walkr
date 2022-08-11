@@ -5,9 +5,8 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use std::{
-    collections,
-    io,
-    time::{Duration, Instant}
+    collections, io,
+    time::{Duration, Instant},
 };
 use tui;
 
@@ -15,12 +14,18 @@ use crate::summarize;
 use crate::ui::app;
 use crate::ui::draw;
 
-fn run_app<B: tui::backend::Backend>(terminal: &mut tui::Terminal<B>, mut app: app::App, tick_rate: Duration) -> anyhow::Result<()> {
+fn run_app<B: tui::backend::Backend>(
+    terminal: &mut tui::Terminal<B>,
+    mut app: app::App,
+    tick_rate: Duration,
+) -> anyhow::Result<()> {
     let mut last_tick = Instant::now();
     loop {
         terminal.draw(|f| draw::draw(f, &mut app))?;
 
-        let timeout = tick_rate.checked_sub(last_tick.elapsed()).unwrap_or_else(|| Duration::from_secs(0));
+        let timeout = tick_rate
+            .checked_sub(last_tick.elapsed())
+            .unwrap_or_else(|| Duration::from_secs(0));
         if crossterm::event::poll(timeout)? {
             if let Event::Key(key) = event::read()? {
                 app.on_key(key);
@@ -36,9 +41,11 @@ fn run_app<B: tui::backend::Backend>(terminal: &mut tui::Terminal<B>, mut app: a
     }
 }
 
-pub fn run(tick_rate : Duration,
-           elf : &summarize::ElfSummary,
-           resolved_deps : &collections::BTreeMap<String, Option<summarize::ElfSummary>>) -> anyhow::Result<()> {
+pub fn run(
+    tick_rate: Duration,
+    elf: &summarize::ElfSummary,
+    resolved_deps: &collections::BTreeMap<String, Option<summarize::ElfSummary>>,
+) -> anyhow::Result<()> {
     // setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
