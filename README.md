@@ -29,8 +29,9 @@ The TUI enables interactive exploration of a binary and its dependencies.  The l
 
 The keybindings available are:
 
-- `Tab` switches focus between the left and right panes
-- `Up` and `Down` scroll through the focused list
+- `Ctrl+n` scrolls down in the binary/library list
+- `Ctrl+p` scrolls up in the binary/library list
+- `Up` and `Down` scroll through detailed info tables in the right pane
 - `Alt-[1-9]` change the tab in the detailed information pane
 - `Ctrl-q` quits
 

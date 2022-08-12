@@ -103,20 +103,6 @@ impl BinaryUIState {
     }
 }
 
-/// The focused component of the UI (i.e., the component receiving keystrokes that are not global)
-#[derive(Eq, Ord, PartialEq, PartialOrd)]
-pub enum Focus {
-    /// Focus is on the sidebar; note that the selected item is stored in the
-    /// `selected_binary` `ListState`, as we don't want to lose that state when
-    /// switching between panes.
-    Sidebar,
-    /// Focus is on the main info pane, with information for the
-    /// currently-selected binary visible
-    ///
-    /// Key events can affect either the tab bar or the info pane
-    InfoPane,
-}
-
 pub struct StaticAppData<'a> {
     pub title: String,
     pub elf: &'a summarize::ElfSummary,
@@ -128,7 +114,6 @@ pub struct StaticAppData<'a> {
 pub struct MutableAppData {
     pub should_quit: bool,
     pub selected_binary: ListState,
-    pub focused_pane: Focus,
     /// The state of the tab widget for each binary
     ///
     /// This is initialized on demand
@@ -189,7 +174,6 @@ impl<'a> App<'a> {
         let mutable_data = MutableAppData {
             should_quit: false,
             selected_binary: ListState::default(),
-            focused_pane: Focus::Sidebar,
             binary_ui_state: collections::BTreeMap::new(),
         };
 
@@ -223,11 +207,41 @@ impl<'a> App<'a> {
             KeyCode::Char('q') if evt.modifiers == KeyModifiers::CONTROL => {
                 self.mutable_app_data.should_quit = true;
             }
+            KeyCode::Char('p') if evt.modifiers == KeyModifiers::CONTROL => {
+                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
+                match self.mutable_app_data.selected_binary.selected() {
+                    None => {
+                        self.mutable_app_data
+                            .selected_binary
+                            .select(Some(num_bins - 1));
+                    }
+                    Some(sel_idx) if sel_idx == 0 => {
+                        // No-op
+                    }
+                    Some(sel_idx) => {
+                        self.mutable_app_data
+                            .selected_binary
+                            .select(Some(sel_idx - 1));
+                    }
+                }
+            }
+            KeyCode::Char('n') if evt.modifiers == KeyModifiers::CONTROL => {
+                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
+                match self.mutable_app_data.selected_binary.selected() {
+                    None => {
+                        self.mutable_app_data.selected_binary.select(Some(0));
+                    }
+                    Some(sel_idx) => {
+                        self.mutable_app_data
+                            .selected_binary
+                            .select(Some(std::cmp::min(sel_idx + 1, num_bins - 1)));
+                    }
+                }
+            }
             KeyCode::Char(c)
                 if evt.modifiers == KeyModifiers::ALT
                     && c >= '1'
-                    && c <= '9'
-                    && self.mutable_app_data.focused_pane == Focus::InfoPane =>
+                    && c <= '9' =>
             {
                 // c.is_ascii_digit()
                 // The user wants to switch info pane using ALT+#
@@ -249,33 +263,7 @@ impl<'a> App<'a> {
                     }
                 }
             }
-            KeyCode::Tab => {
-                // Change focus between the sidebar and info pane
-                if self.mutable_app_data.focused_pane == Focus::Sidebar {
-                    self.mutable_app_data.focused_pane = Focus::InfoPane;
-                } else {
-                    self.mutable_app_data.focused_pane = Focus::Sidebar;
-                }
-            }
-            KeyCode::Up if self.mutable_app_data.focused_pane == Focus::Sidebar => {
-                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
-                match self.mutable_app_data.selected_binary.selected() {
-                    None => {
-                        self.mutable_app_data
-                            .selected_binary
-                            .select(Some(num_bins - 1));
-                    }
-                    Some(sel_idx) if sel_idx == 0 => {
-                        // No-op
-                    }
-                    Some(sel_idx) => {
-                        self.mutable_app_data
-                            .selected_binary
-                            .select(Some(sel_idx - 1));
-                    }
-                }
-            }
-            KeyCode::Up if self.mutable_app_data.focused_pane == Focus::InfoPane => {
+            KeyCode::Up => {
                 match self.selected_binary() {
                     None => {}
                     Some(elf_summ) => match &elf_summ.binary_type {
@@ -304,20 +292,7 @@ impl<'a> App<'a> {
                     },
                 }
             }
-            KeyCode::Down if self.mutable_app_data.focused_pane == Focus::Sidebar => {
-                let num_bins = 1 + self.static_app_data.resolved_dependencies.len();
-                match self.mutable_app_data.selected_binary.selected() {
-                    None => {
-                        self.mutable_app_data.selected_binary.select(Some(0));
-                    }
-                    Some(sel_idx) => {
-                        self.mutable_app_data
-                            .selected_binary
-                            .select(Some(std::cmp::min(sel_idx + 1, num_bins - 1)));
-                    }
-                }
-            }
-            KeyCode::Down if self.mutable_app_data.focused_pane == Focus::InfoPane => {
+            KeyCode::Down => {
                 match self.selected_binary() {
                     None => {}
                     Some(elf_summ) => match &elf_summ.binary_type {
