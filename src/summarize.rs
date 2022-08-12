@@ -1,6 +1,6 @@
 use object::elf;
 use object::read::elf as elf_reader;
-use object::read::elf::{Dyn, FileHeader, Sym};
+use object::read::elf::{Dyn, FileHeader, Sym, SectionHeader, ProgramHeader};
 use object::read::{SectionIndex, StringTable};
 use object::Endianness;
 use std::fs;
@@ -109,20 +109,34 @@ pub enum BinaryType {
     Dynamic(DynamicData),
 }
 
-// TODO:
-//
-// - Include the section list
-// - Include the segment mapping
-//
-// - Render the layout
-//
-// - Add interactive mode
+pub struct Section {
+    pub name: String,
+    pub address: u64,
+    pub alignment: u64,
+    pub offset: u64,
+    pub size: u64,
+    pub type_: u32,
+    pub flags: u64,
+}
+
+pub struct Segment {
+    pub type_: u32,
+    pub flags: u32,
+    pub offset: u64,
+    pub vaddr: u64,
+    pub paddr: u64,
+    pub file_size: u64,
+    pub mem_size: u64,
+    pub alignment: u64,
+}
 
 pub struct ElfSummary {
     pub endianness: Endianness,
     pub bit_size: usize,
     pub filename: PathBuf,
     pub binary_type: BinaryType,
+    pub sections: Vec<Section>,
+    pub segments: Vec<Segment>,
 }
 
 fn analyze_dependencies<Elf>(
@@ -201,6 +215,41 @@ where
     }
 }
 
+fn parse_section<Elf: elf_reader::FileHeader<Endian = Endianness>>(
+    end: Elf::Endian,
+    string_table: &StringTable,
+    hdr: &Elf::SectionHeader
+) -> Section {
+    let sec_name = hdr
+        .name(end, *string_table)
+        .map_or(String::from("<Unknown>"), |s| String::from_utf8_lossy(s).to_string());
+    Section{
+        name: sec_name,
+        address: hdr.sh_addr(end).into(),
+        alignment: hdr.sh_addralign(end).into(),
+        offset: hdr.sh_offset(end).into(),
+        size: hdr.sh_size(end).into(),
+        type_: hdr.sh_type(end),
+        flags: hdr.sh_flags(end).into(),
+    }
+}
+
+fn parse_segment<Elf: elf_reader::FileHeader<Endian = Endianness>>(
+    end: Elf::Endian,
+    hdr: &Elf::ProgramHeader
+) -> Segment {
+    Segment {
+        type_: hdr.p_type(end),
+        flags: hdr.p_flags(end),
+        offset: hdr.p_offset(end).into(),
+        vaddr: hdr.p_vaddr(end).into(),
+        paddr: hdr.p_paddr(end).into(),
+        file_size: hdr.p_filesz(end).into(),
+        mem_size: hdr.p_memsz(end).into(),
+        alignment: hdr.p_align(end).into(),
+    }
+}
+
 fn summarize_elf<Elf: elf_reader::FileHeader<Endian = Endianness>>(
     f: &Path,
     bytes: &[u8],
@@ -208,6 +257,9 @@ fn summarize_elf<Elf: elf_reader::FileHeader<Endian = Endianness>>(
 ) -> anyhow::Result<ElfSummary> {
     let end = obj.endian()?;
     let sec_table = obj.sections(end, bytes)?;
+
+    let section_header_strings = obj.section_strings(end, bytes, sec_table.iter().as_slice())?;
+    let parsed_segments = obj.program_headers(end, bytes)?;
 
     let deps = analyze_dependencies(bytes, obj, &sec_table)?;
     let bs = ElfSummary {
@@ -219,6 +271,8 @@ fn summarize_elf<Elf: elf_reader::FileHeader<Endian = Endianness>>(
         bit_size: if obj.is_class_32() { 32 } else { 64 },
         filename: PathBuf::from(f),
         binary_type: deps,
+        sections: sec_table.iter().map(|s| parse_section::<Elf>(end, &section_header_strings, s)).collect(),
+        segments: parsed_segments.iter().map(|s| parse_segment::<Elf>(end, s)).collect(),
     };
     Ok(bs)
 }
